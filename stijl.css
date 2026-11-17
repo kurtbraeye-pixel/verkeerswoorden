@@ -95,5 +95,39 @@ progress::-webkit-progress-bar{background:#e0e9df}progress::-webkit-progress-val
 .result.win-red{border:2px solid #d2412f}.result.win-red .kicker{color:#c0392b}
 .result.win-blue{border:2px solid #2f63c9}.result.win-blue .kicker{color:#2756b3}
 .result h1{font-size:clamp(2rem,6vw,3rem)!important}
-@media(max-width:780px){.modes{grid-template-columns:1fr 1fr}.lessons{grid-template-columns:repeat(3,1fr)}.road{opacity:.6;right:-200px}}
-@media(max-width:560px){.bar,main,footer{width:calc(100% - 28px)}main{padding-top:16px}.hero{min-height:240px}.modes,.choices{grid-template-columns:1fr}.lessons{grid-template-columns:1fr 1fr}.tile{padding:12px;gap:8px}.tile[aria-pressed=true]{padding:11px}.stat{padding:8px 4px}.stat strong{font-size:1.3rem}.stat small{font-size:.66rem}.choice kbd{display:none}.mgrid{grid-template-columns:repeat(4,1fr);gap:6px}.face{border-radius:10px}.face-front{padding:3px}.brand{font-size:.94rem}.icon{width:32px;height:32px}.review{font-size:.84rem}.topline{font-size:.9rem}}
+/* Te herhalen leegmaken */
+.bar-actions{display:flex;align-items:center;gap:6px}
+.reset{border:0;background:#edf2ec;border-radius:11px;width:38px;height:38px;font-size:1.15rem;font-weight:800;color:#214835}
+.reset:hover:not(:disabled){background:#dfe9dd}.reset:disabled{opacity:.4}
+/* Woordladder */
+.ladder-banner{width:100%;background:#ecf6e7;border:2px solid var(--green)}
+.ladder-banner .icon{background:var(--lime)}
+.exercise > .panel + .panel{margin-top:14px}
+.panel h2{font-size:1.25rem;margin-bottom:12px}
+.kicker.green{color:var(--green);margin-bottom:6px}
+.ladder{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.rung{display:grid;grid-template-columns:36px minmax(0,1.3fr) minmax(60px,1fr) 52px;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:#f5f8f4;border:1px solid var(--line)}
+.rung-step{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-weight:800;background:#dfe9dd;color:#214835}
+.rung.s5 .rung-step{background:var(--lime)}
+.rung-text strong,.rung-text small{display:block}.rung-text small{color:var(--muted);font-size:.82rem}
+.rung-bar{height:10px;border-radius:10px;background:#e0e9df;overflow:hidden}
+.rung-bar span{display:block;height:100%;background:#24775b;border-radius:10px;min-width:0;transition:width .5s}
+.rung.s1 .rung-bar span{background:#c9a24a}
+.rung-count{text-align:right;font-weight:800;font-family:Manrope,sans-serif;font-variant-numeric:tabular-nums}
+.rung-count em{font-style:normal;color:#1f7a55;font-size:.85rem}
+.ladder + .small{margin-top:10px}
+.badge{background:#edf2ec;color:#214835;border-radius:999px;padding:5px 12px;font-weight:700;font-size:.88rem}
+.move{display:inline-block;border-radius:8px;padding:2px 8px;margin-right:6px;font-weight:800}
+.move.up{background:#e4f6e9;color:#1f7a55}.move.down{background:#faece8;color:#a33d27}
+.how{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+.how summary{cursor:pointer;font-weight:700}.how p{margin:8px 0;color:var(--muted)}
+.danger{color:#a33d27}
+.result .ladder{margin-top:16px}
+/* Bevestigingsvenster */
+.confirm{border:0;border-radius:20px;padding:24px;max-width:min(420px,calc(100% - 32px));box-shadow:0 20px 60px rgba(10,30,25,.3);color:var(--ink)}
+.confirm::backdrop{background:rgba(14,32,27,.45)}
+.confirm h2{font-size:1.35rem;margin-bottom:8px}.confirm p{margin:0;color:var(--muted)}
+.confirm .actions{justify-content:flex-end;margin-top:20px}.confirm .actions .primary:last-child{margin-left:0}
+.danger-fill{background:#b8432c;border-color:#9c3825;color:white}.danger-fill:hover{background:#9c3825}
+{.modes{grid-template-columns:1fr 1fr}.lessons{grid-template-columns:repeat(3,1fr)}.road{opacity:.6;right:-200px}}
+@media(max-width:560px){.bar,main,footer{width:calc(100% - 28px)}main{padding-top:16px}.hero{min-height:240px}.modes,.choices{grid-template-columns:1fr}.lessons{grid-template-columns:1fr 1fr}.tile{padding:12px;gap:8px}.tile[aria-pressed=true]{padding:11px}.stat{padding:8px 4px}.stat strong{font-size:1.3rem}.stat small{font-size:.66rem}.choice kbd{display:none}.rung{grid-template-columns:30px minmax(0,1fr) 44px;gap:8px;padding:8px}.rung-bar{grid-column:2 / 4;grid-row:2}.rung-step{width:28px;height:28px}.reset{width:34px;height:34px}.mgrid{grid-template-columns:repeat(4,1fr);gap:6px}.face{border-radius:10px}.face-front{padding:3px}.brand{font-size:.94rem}.icon{width:32px;height:32px}.review{font-size:.84rem}.topline{font-size:.9rem}}

@@ -39,6 +39,39 @@ function shuffle(items) {
 }
 function watchCount() {
   document.querySelector('#count').textContent = review.size;
+  const reset = document.querySelector('#reset-review');
+  if (reset) reset.disabled = review.size === 0;
+}
+function askConfirm(title, message, okLabel) {
+  return new Promise(resolve => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'confirm';
+    dialog.innerHTML = `<h2>${escape(title)}</h2><p>${escape(message)}</p>
+      <div class="actions"><button class="secondary" value="no">Annuleren</button><button class="primary danger-fill" value="yes">${escape(okLabel)}</button></div>`;
+    const back = document.activeElement;
+    let answer = false;
+    dialog.querySelectorAll('button').forEach(button => button.onclick = () => {
+      answer = button.value === 'yes';
+      dialog.close();
+    });
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      if (back && document.contains(back)) back.focus();
+      resolve(answer);
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.querySelector('[value=no]').focus();
+  });
+}
+async function resetReview() {
+  if (!review.size) return;
+  const ok = await askConfirm('"Te herhalen" leegmaken?',
+    `De ${review.size} ${review.size === 1 ? 'woord verdwijnt' : 'woorden verdwijnen'} uit de lijst. De teller staat daarna op 0.`, 'Leegmaken');
+  if (!ok) return;
+  review.clear();
+  try { localStorage.setItem(key, '[]'); } catch {}
+  watchCount();
 }
 function mark(card, correct) {
   if (correct) review.delete(card.id);
@@ -59,12 +92,15 @@ function goHome(focus = true) {
     <section class="hero"><div class="hero-copy"><p class="kicker">Verkeerstheorie</p>
       <h1>Oefen je<br><span>verkeerswoorden</span></h1>
       <p>Kijk, luister en herhaal de woorden uit je lessen.</p></div><div class="road" aria-hidden="true"></div></section>
+    <section class="section"><button class="tile ladder-banner" id="ladder"><span class="icon" aria-hidden="true">☰</span>
+      <span><strong>Mijn woordladder</strong><small>${ladderSummary()}</small></span><span class="arrow" aria-hidden="true">→</span></button></section>
     <section class="section"><h2>1. Hoe wil je oefenen?</h2><div class="modes">
       ${modes.map(item => `<button class="tile" data-mode="${item.key}" aria-pressed="${mode === item.key}"><span class="icon" aria-hidden="true">${item.icon}</span><span><strong>${item.title}</strong><small>${item.detail}</small></span></button>`).join('')}
     </div></section>
     <section class="section"><div class="section-head"><h2>2. Kies een les</h2><button class="primary" id="mix">Mix van 10 woorden</button></div><div class="lessons">
     ${groepen.map((group,i) => `<button class="tile" data-lesson="${i}"><span><strong>${group.name}</strong><small>${group.cards.length} kaarten</small></span><span class="arrow" aria-hidden="true">→</span></button>`).join('')}
     </div></section>`;
+  view.querySelector('#ladder').onclick = openLadder;
   view.querySelectorAll('[data-mode]').forEach(button => button.onclick = () => {
     mode = button.dataset.mode;
     view.querySelectorAll('[data-mode]').forEach(tile => tile.setAttribute('aria-pressed', tile === button));
@@ -489,6 +525,199 @@ document.addEventListener('keydown', event => {
   const button = view.querySelectorAll('.choice')[Number(event.key) - 1];
   if (button) button.click();
 });
+// ---- Woordladder ----
+const ladderKey = 'verkeerswoorden-ladder-v1';
+const ladderSteps = [
+  {name: 'Nieuw of moeilijk', when: 'vandaag nog', days: 0},
+  {name: 'Net geleerd', when: 'morgen', days: 1},
+  {name: 'Gaat goed', when: 'over 3 dagen', days: 3},
+  {name: 'Bijna gekend', when: 'over een week', days: 7},
+  {name: 'Gekend', when: 'over 2 weken', days: 14},
+];
+const newPerDay = 5;
+const maxDue = 20;
+function today() {
+  const now = new Date();
+  return Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 864e5);
+}
+function loadLadder() {
+  const empty = {lessons: [0], words: {}, newDay: 0, newCount: 0};
+  try {
+    const saved = JSON.parse(localStorage.getItem(ladderKey) || 'null');
+    if (!saved || typeof saved !== 'object') return empty;
+    const lessons = Array.isArray(saved.lessons) ? saved.lessons.filter(i => groepen[i]) : [];
+    const words = {};
+    for (const [id, word] of Object.entries(saved.words || {})) {
+      if (all.some(card => card.id === id) && word.step >= 1 && word.step <= 5) words[id] = {step: word.step, due: Number(word.due) || 0};
+    }
+    return {lessons: lessons.length ? lessons : [0], words, newDay: saved.newDay || 0, newCount: saved.newCount || 0};
+  } catch { return empty; }
+}
+let ladder = loadLadder();
+function saveLadder() {
+  try { localStorage.setItem(ladderKey, JSON.stringify(ladder)); } catch {}
+}
+function ladderPool() {
+  const names = ladder.lessons.map(i => groepen[i].name);
+  return all.filter(card => names.includes(card.group));
+}
+function newLeft() {
+  return ladder.newDay === today() ? Math.max(0, newPerDay - ladder.newCount) : newPerDay;
+}
+function ladderToday(extra = false) {
+  const pool = ladderPool();
+  const due = pool.filter(card => ladder.words[card.id] && ladder.words[card.id].due <= today())
+    .sort((a,b) => ladder.words[a.id].step - ladder.words[b.id].step || ladder.words[a.id].due - ladder.words[b.id].due)
+    .slice(0, maxDue);
+  const fresh = pool.filter(card => !ladder.words[card.id]);
+  return {due: extra ? [] : due, fresh: fresh.slice(0, extra ? newPerDay : newLeft()), unstarted: fresh.length};
+}
+function ladderSummary() {
+  const {due, fresh} = ladderToday();
+  if (!Object.keys(ladder.words).length) return 'Leer elke dag een paar woorden, slim herhaald';
+  const total = due.length + fresh.length;
+  return total ? `${total} ${total === 1 ? 'woord' : 'woorden'} te oefenen vandaag` : 'Klaar voor vandaag! ✓';
+}
+function ladderView(highlight = {}) {
+  const pool = ladderPool();
+  const counts = [0, 0, 0, 0, 0];
+  pool.forEach(card => { const word = ladder.words[card.id]; if (word) counts[word.step - 1]++; });
+  const unstarted = pool.length - counts.reduce((a,b) => a + b, 0);
+  return `<ol class="ladder" aria-label="Je woordladder">${[5,4,3,2,1].map(step => `<li class="rung s${step}">
+      <span class="rung-step" aria-hidden="true">${step}</span>
+      <span class="rung-text"><strong>Trede ${step}: ${ladderSteps[step - 1].name}</strong><small>Komt terug ${ladderSteps[step - 1].when}</small></span>
+      <span class="rung-bar" aria-hidden="true"><span style="width:${pool.length ? counts[step - 1] / pool.length * 100 : 0}%"></span></span>
+      <span class="rung-count">${counts[step - 1]}${highlight[step] ? ` <em>+${highlight[step]}</em>` : ''}</span></li>`).join('')}</ol>
+    <p class="muted small">Nog niet gestart: ${unstarted} van de ${pool.length} woorden.</p>`;
+}
+function openLadder() {
+  stopAudio();
+  stopTimer();
+  round = null;
+  const {due, fresh, unstarted} = ladderToday();
+  const total = due.length + fresh.length;
+  const parts = [due.length && `${due.length} ${due.length === 1 ? 'woord' : 'woorden'} herhalen`,
+    fresh.length && `${fresh.length} nieuwe ${fresh.length === 1 ? 'woord' : 'woorden'}`].filter(Boolean);
+  view.innerHTML = `<section class="exercise"><div class="topline"><button class="back" id="back">← Naar de start</button></div>
+    <div class="panel"><p class="kicker green">Slim herhalen</p><h1>Mijn woordladder</h1>
+    ${total ? `<p>Vandaag: ${parts.join(' en ')}.</p><div class="actions"><button class="primary" id="go">Start (${total} ${total === 1 ? 'woord' : 'woorden'})</button></div>`
+      : `<p>Je bent klaar voor vandaag. Kom morgen terug!</p>
+        ${unstarted ? `<div class="actions"><button class="secondary" id="extra">Toch ${Math.min(newPerDay, unstarted)} nieuwe woorden leren</button></div>` : ''}`}
+    </div>
+    <div class="panel"><h2>Je ladder</h2>${ladderView()}</div>
+    <div class="panel"><h2>Welke lessen oefen je?</h2><p class="muted small">Kies de lessen die je al gezien hebt. Nieuwe woorden komen in de volgorde van de les.</p>
+      <div class="chips" role="group" aria-label="Lessen in de ladder">${groepen.map((group,i) =>
+        `<button class="chip" data-ladder-lesson="${i}" aria-pressed="${ladder.lessons.includes(i)}">${escape(group.name)}</button>`).join('')}</div>
+      <details class="how"><summary>Hoe werkt de woordladder?</summary>
+        <p>Elk woord staat op een trede. Weet je het juist, dan klimt het een trede hoger en komt het pas later terug. Weet je het fout, dan valt het terug naar trede 1 en komt het vandaag nog eens.</p>
+        <p>Zo oefen je vooral de woorden die je nog moeilijk vindt. Elke dag komen er ${newPerDay} nieuwe woorden bij.</p>
+        <p>Je ladder wordt alleen op dit toestel bewaard.</p></details>
+      <div class="actions"><button class="secondary danger" id="wipe">Ladder wissen</button></div></div></section>`;
+  view.querySelector('#back').onclick = () => goHome();
+  view.querySelector('#go')?.addEventListener('click', () => startLadder(false));
+  view.querySelector('#extra')?.addEventListener('click', () => startLadder(true));
+  view.querySelectorAll('[data-ladder-lesson]').forEach(button => button.onclick = () => {
+    const lesson = Number(button.dataset.ladderLesson);
+    if (ladder.lessons.includes(lesson)) {
+      if (ladder.lessons.length === 1) return;
+      ladder.lessons = ladder.lessons.filter(i => i !== lesson);
+    } else {
+      ladder.lessons = [...ladder.lessons, lesson].sort((a,b) => a - b);
+    }
+    saveLadder();
+    openLadder();
+    view.querySelector(`[data-ladder-lesson="${lesson}"]`).focus();
+  });
+  view.querySelector('#wipe').onclick = async () => {
+    const ok = await askConfirm('Woordladder wissen?', 'Alle woorden beginnen dan opnieuw onderaan de ladder. Je gekozen lessen blijven bewaard.', 'Ladder wissen');
+    if (!ok) return;
+    ladder = {lessons: ladder.lessons, words: {}, newDay: 0, newCount: 0};
+    saveLadder();
+    openLadder();
+  };
+  window.scrollTo(0,0);
+  headingFocus();
+}
+function startLadder(extra) {
+  const {due, fresh} = ladderToday(extra);
+  round = {mode: 'ladder', title: 'Mijn woordladder', cards: shuffle([...due, ...fresh]), index: 0,
+    correct: 0, missed: [], tries: {}, start: {}, moves: {}};
+  drawLadder();
+  window.scrollTo(0,0);
+  headingFocus();
+}
+function ladderAnswer(card, correct) {
+  const word = ladder.words[card.id];
+  if (!word) {
+    if (ladder.newDay !== today()) { ladder.newDay = today(); ladder.newCount = 0; }
+    ladder.newCount++;
+  }
+  if (!(card.id in round.start)) round.start[card.id] = word ? word.step : 0;
+  const step = correct ? Math.min(5, Math.max(word ? word.step : 1, 1) + 1) : 1;
+  ladder.words[card.id] = {step, due: today() + ladderSteps[step - 1].days};
+  saveLadder();
+  mark(card, correct);
+  return step;
+}
+function drawLadder() {
+  const card = round.cards[round.index];
+  if (!card) { finishLadder(); return; }
+  const word = ladder.words[card.id];
+  const options = optionsFor(card);
+  view.innerHTML = `<section class="exercise"><div class="topline"><button class="back" id="back">← Naar mijn ladder</button>
+      <span class="badge">${word ? `Trede ${word.step}` : 'Nieuw woord'}</span></div>
+    <div class="topline"><strong>Mijn woordladder</strong><span>Woord ${round.index + 1} van ${round.cards.length}</span></div>
+    <progress aria-label="Voortgang" max="${round.cards.length}" value="${round.index}"></progress>
+    <div class="panel"><h1>Welk woord past bij de foto?</h1>${images(card,false)}
+    <div class="choices">${options.map((option,i) => `<button class="choice" data-choice="${i}">${escape(option)}</button>`).join('')}</div>
+    <div class="feedback" role="status"></div><div id="continue"></div><p id="audio-status" class="muted" role="status"></p></div></section>`;
+  view.querySelector('#back').onclick = openLadder;
+  const choices = [...view.querySelectorAll('.choice')];
+  choices.forEach(button => button.onclick = () => {
+    const correct = options[Number(button.dataset.choice)] === label(card);
+    const step = ladderAnswer(card, correct);
+    round.tries[card.id] = (round.tries[card.id] || 0) + 1;
+    if (correct) round.correct++;
+    else {
+      if (!round.missed.includes(card)) round.missed.push(card);
+      if (round.tries[card.id] < 3) round.cards.push(card);
+    }
+    choices.forEach((choice,i) => {
+      choice.disabled = true;
+      if (options[i] === label(card)) choice.classList.add('correct');
+      else if (choice === button) choice.classList.add('wrong');
+    });
+    playSound(correct ? ting : buzzer);
+    setTimeout(() => { if (round?.cards[round.index] === card) speak(card); }, correct ? 500 : 900);
+    view.querySelector('.feedback').innerHTML = correct
+      ? `<span class="move up">↑ Trede ${step}</span> ${step === 5 ? 'Gekend! Dit woord komt pas over 2 weken terug.' : `Juist! Dit woord komt terug ${ladderSteps[step - 1].when}.`}`
+      : `<span class="move down">↓ Trede 1</span> Het juiste antwoord is: <strong>${escape(label(card))}</strong>. ${round.tries[card.id] < 3 ? 'Het komt straks nog eens.' : ''}`;
+    const followup = view.querySelector('#continue');
+    followup.innerHTML = lines(card) + `<div class="actions"><button class="secondary" id="again">♪ Luister</button>
+      <button class="primary" id="next">${round.index + 1 === round.cards.length ? 'Bekijk je ladder' : 'Volgende woord →'}</button></div>`;
+    followup.querySelector('#again').onclick = () => speak(card);
+    followup.querySelector('#next').onclick = () => { stopAudio(); round.index++; drawLadder(); headingFocus(); };
+    followup.querySelector('#next').focus();
+  });
+}
+function finishLadder() {
+  const climbed = {};
+  let up = 0;
+  for (const [id, from] of Object.entries(round.start)) {
+    const now = ladder.words[id].step;
+    if (now > from) { up++; climbed[now] = (climbed[now] || 0) + 1; }
+  }
+  const words = Object.keys(round.start).length;
+  view.innerHTML = `<section class="exercise"><div class="topline"><button class="back" id="back">← Naar mijn ladder</button></div>
+    <div class="panel result"><p class="kicker green">Goed bezig!</p><h1>${up} van ${words} ${words === 1 ? 'woord' : 'woorden'} omhoog</h1>
+    <p>${round.missed.length ? `Moeilijk vandaag: ${round.missed.map(card => escape(label(card))).join(', ')}.` : 'Je had alles in één keer juist!'}</p>
+    ${ladderView(climbed)}
+    <div class="actions"><button class="primary" id="done">Naar mijn ladder</button></div></div></section>`;
+  view.querySelector('#back').onclick = openLadder;
+  view.querySelector('#done').onclick = openLadder;
+  headingFocus();
+}
+document.querySelector('#reset-review')?.addEventListener('click', resetReview);
 document.querySelector('#home').onclick = () => goHome();
 document.querySelector('#review').onclick = () => start(all.filter(card => review.has(card.id)),'Te herhalen');
 watchCount();
