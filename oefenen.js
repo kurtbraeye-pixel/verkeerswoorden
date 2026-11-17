@@ -91,6 +91,8 @@ function speak(card) {
   stopAudio();
   const audio = new Audio('spraak/' + card.id + '.wav');
   playing = audio;
+  audio.preservesPitch = true;
+  audio.playbackRate = 0.85; // iets trager voorlezen
   audio.play().catch(() => {
     if (playing === audio) status.textContent = 'De audio kon niet worden afgespeeld. Probeer het opnieuw.';
   });
